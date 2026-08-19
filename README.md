@@ -37,7 +37,7 @@ better this does.
 Needs [ripgrep](https://github.com/BurntSushi/ripgrep).
 
 ```
-curl -o ~/bin/outline https://raw.githubusercontent.com/Mi/outline/main/outline
+curl -o ~/bin/outline https://raw.githubusercontent.com/kyleboas/outline/main/outline
 chmod +x ~/bin/outline
 ```
 
