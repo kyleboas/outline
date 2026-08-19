@@ -1,0 +1,2 @@
+#!/bin/sh
+rg -n '^\s*(export )?(default )?(async )?(def |class |function |interface |type \w+ *=|enum |fn |func |(const|let|var) \w+ *= *(async *)?(\(|function))' "$@"
