@@ -7,6 +7,8 @@ names and their line numbers, then read the part you need.
 
 ```
 $ outline src/fetch.ts
+
+src/fetch.ts
 6:function ipv4ToInt(address: string): number {
 15:function isBlockedIp(address: string): boolean {
 41:async function safeUrl(raw: string): Promise<URL> {

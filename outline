@@ -1,2 +1,3 @@
 #!/bin/sh
-rg -n '^\s*(export )?(default )?(async )?(def |class |function |interface |type \w+ *=|enum |fn |func |(const|let|var) \w+ *= *(async *)?(\(|function))' "$@"
+rg -nH '^\s*(export )?(default )?(async )?(def |class |function |interface |type \w+ *=|enum |fn |func |(const|let|var) \w+ *= *(async *)?(\(|function))' "$@" |
+awk -F: '$1!=p{p=$1; printf "\n%s\n", p} {i=index($0,":"); print substr($0,i+1)}'
