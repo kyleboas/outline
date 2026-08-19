@@ -1,0 +1,24 @@
+#!/bin/sh
+# PreToolUse hook for Read: blocks whole-file reads of long source files and
+# tells the agent to run `outline` first, then Read a range.
+# Install: see README.
+set -e
+in=$(cat)
+f=$(printf '%s' "$in" | jq -r '.tool_input.file_path // empty')
+rng=$(printf '%s' "$in" | jq -r '(.tool_input.offset // .tool_input.limit) // empty')
+
+# allow: no path, a range was given, missing file, or not source code
+[ -n "$f" ] && [ -z "$rng" ] && [ -f "$f" ] || exit 0
+case "$f" in
+  *.py|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.go|*.rs|*.rb|*.java|*.c|*.h|*.cpp|*.sh) ;;
+  *) exit 0 ;;
+esac
+
+n=$(wc -l < "$f")
+[ "$n" -le "${OUTLINE_HOOK_MAX:-200}" ] && exit 0
+
+jq -n --arg f "$f" --arg n "$n" '{hookSpecificOutput:{
+  hookEventName:"PreToolUse", permissionDecision:"deny",
+  permissionDecisionReason:("\($f) is \($n) lines. Run `outline \($f)` to get its
+definitions with line numbers, then Read with offset/limit around the part you
+need. Read the whole file only if the outline is genuinely not enough.")}}'

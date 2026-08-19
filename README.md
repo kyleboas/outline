@@ -68,3 +68,26 @@ they're used, which matters on large projects. This one is two lines.
 ## Licence
 
 MIT
+
+## Making an agent actually use it
+
+Telling an agent in `CLAUDE.md` works most of the time. To enforce it, install
+`outline-hook` as a `PreToolUse` hook on `Read`. It blocks whole-file reads of
+source files over 200 lines and tells the agent to outline first.
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Read",
+        "hooks": [{ "type": "command", "command": "/path/to/outline-hook" }] }
+    ]
+  }
+}
+```
+
+It allows the read through when an `offset` or `limit` is given, when the file
+is short, and for anything that isn't source code. Set `OUTLINE_HOOK_MAX` to
+change the 200-line threshold. Needs `jq`.
