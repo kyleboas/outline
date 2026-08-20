@@ -1,0 +1,17 @@
+#!/bin/sh
+# PATH shim: refuses `sed -n p file.py` with no line range; ranged sed passes.
+real=/bin/sed
+[ -x "$real" ] || real=/usr/bin/sed
+[ "${OUTLINE_HOOK:-1}" = "0" ] && exec "$real" "$@"
+[ $# -eq 3 ] && [ "$1" = "-n" ] || exec "$real" "$@"
+case "$2" in *[0-9]*) exec "$real" "$@" ;; esac   # a real range -> fine
+f=$3
+case "$f" in
+  *.py|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.go|*.rs|*.rb|*.java|*.c|*.h|*.cpp|*.sh) ;;
+  *) exec "$real" "$@" ;;
+esac
+[ -f "$f" ] || exec "$real" "$@"
+n=$(wc -l < "$f")
+[ "$n" -le "${OUTLINE_HOOK_MAX:-200}" ] && exec "$real" "$@"
+printf '%s is %s lines. Run `outline %s` for its definitions with line numbers, then sed -n "N,Mp" the range you need. To read it whole anyway: OUTLINE_HOOK=0 sed -n p %s\n' "$f" "$n" "$f" "$f" >&2
+exit 1

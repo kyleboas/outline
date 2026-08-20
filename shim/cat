@@ -1,0 +1,16 @@
+#!/bin/sh
+# PATH shim: refuses a bare `cat` of a long source file and points at `outline`.
+# Escape hatches: OUTLINE_HOOK=0 cat f.py  ·  command cat f.py  ·  /bin/cat f.py
+real=/bin/cat
+[ -x "$real" ] || real=/usr/bin/cat
+[ "${OUTLINE_HOOK:-1}" = "0" ] && exec "$real" "$@"
+[ $# -eq 1 ] || exec "$real" "$@"
+case "$1" in
+  *.py|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.go|*.rs|*.rb|*.java|*.c|*.h|*.cpp|*.sh) ;;
+  *) exec "$real" "$@" ;;
+esac
+[ -f "$1" ] || exec "$real" "$@"
+n=$(wc -l < "$1")
+[ "$n" -le "${OUTLINE_HOOK_MAX:-200}" ] && exec "$real" "$@"
+printf '%s is %s lines. Run `outline %s` for its definitions with line numbers, then read only the range you need (sed -n "N,Mp"). To read it whole anyway: OUTLINE_HOOK=0 cat %s\n' "$1" "$n" "$1" "$1" >&2
+exit 1
