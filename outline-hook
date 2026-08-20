@@ -1,24 +1,55 @@
 #!/bin/sh
-# PreToolUse hook for Read: blocks whole-file reads of long source files and
-# tells the agent to run `outline` first, then Read a range.
-# Install: see README.
+# PreToolUse hook for Read and Bash. Blocks whole-file reads of long source
+# files and tells the agent to run `outline` first. Install: see README.
 set -e
 in=$(cat)
-f=$(printf '%s' "$in" | jq -r '.tool_input.file_path // empty')
-rng=$(printf '%s' "$in" | jq -r '(.tool_input.offset // .tool_input.limit) // empty')
+max=${OUTLINE_HOOK_MAX:-200}
 
-# allow: no path, a range was given, missing file, or not source code
-[ -n "$f" ] && [ -z "$rng" ] && [ -f "$f" ] || exit 0
-case "$f" in
-  *.py|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.go|*.rs|*.rb|*.java|*.c|*.h|*.cpp|*.sh) ;;
-  *) exit 0 ;;
+deny() {
+  jq -n --arg f "$1" --arg n "$2" '{hookSpecificOutput:{
+    hookEventName:"PreToolUse", permissionDecision:"deny",
+    permissionDecisionReason:("\($f) is \($n) lines. Run `outline \($f)` to get its definitions with line numbers, then read only the range you need (Read with offset/limit, or sed -n 'N,Mp'). Read it whole only if the outline is genuinely not enough.")}}'
+  exit 0
+}
+
+is_source() {
+  case "$1" in
+    *.py|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.go|*.rs|*.rb|*.java|*.c|*.h|*.cpp|*.sh) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+check() {   # path -> deny if long source file
+  [ -f "$1" ] || return 0
+  is_source "$1" || return 0
+  n=$(wc -l < "$1")
+  [ "$n" -gt "$max" ] && deny "$1" "$n"
+  return 0
+}
+
+case $(printf '%s' "$in" | jq -r '.tool_name // empty') in
+  Read)
+    f=$(printf '%s' "$in" | jq -r '.tool_input.file_path // empty')
+    rng=$(printf '%s' "$in" | jq -r '(.tool_input.offset // .tool_input.limit) // empty')
+    [ -n "$f" ] && [ -z "$rng" ] && check "$f"
+    ;;
+  Bash)
+    cmd=$(printf '%s' "$in" | jq -r '.tool_input.command // empty')
+    # Only judge a bare, single, unbounded read. Anything piped, redirected,
+    # chained or already limited is left alone.
+    case "$cmd" in
+      *'|'*|*'>'*|*'<'*|*';'*|*'&'*|*'head'*|*'tail'*|*'$('*|*'`'*) exit 0 ;;
+    esac
+    set -- $cmd
+    case "$1" in
+      cat)   shift ;;
+      sed)   # allow a real range: any digit in the sed expression
+             printf '%s' "$cmd" | grep -qE "sed +-n +['\"]?[0-9]" && exit 0
+             shift
+             while [ $# -gt 1 ]; do case "$1" in -*|*p*) shift ;; *) break ;; esac; done ;;
+      *)     exit 0 ;;
+    esac
+    [ $# -eq 1 ] && check "$1"
+    ;;
 esac
-
-n=$(wc -l < "$f")
-[ "$n" -le "${OUTLINE_HOOK_MAX:-200}" ] && exit 0
-
-jq -n --arg f "$f" --arg n "$n" '{hookSpecificOutput:{
-  hookEventName:"PreToolUse", permissionDecision:"deny",
-  permissionDecisionReason:("\($f) is \($n) lines. Run `outline \($f)` to get its
-definitions with line numbers, then Read with offset/limit around the part you
-need. Read the whole file only if the outline is genuinely not enough.")}}'
+exit 0

@@ -83,13 +83,23 @@ Add to `~/.claude/settings.json`:
 {
   "hooks": {
     "PreToolUse": [
-      { "matcher": "Read",
+      { "matcher": "Read|Bash",
         "hooks": [{ "type": "command", "command": "/path/to/outline-hook" }] }
     ]
   }
 }
 ```
 
-It allows the read through when an `offset` or `limit` is given, when the file
-is short, and for anything that isn't source code. Set `OUTLINE_HOOK_MAX` to
-change the 200-line threshold. Needs `jq`.
+`Bash` matters as much as `Read` — `cat file.py` reads just as much as the Read
+tool does, and agents told to prefer shell commands would otherwise route around
+the hook entirely.
+
+It lets a read through when:
+
+- `Read` is given an `offset` or `limit`
+- `sed -n` is given a line range (`sed -n '41,60p' file.py`)
+- the command is piped, redirected, chained, or bounded by `head`/`tail`
+- the file is short, or isn't source code
+
+Only a bare `cat file.py` or `sed -n p file.py` on a long source file is
+blocked. Set `OUTLINE_HOOK_MAX` to change the 200-line threshold. Needs `jq`.
