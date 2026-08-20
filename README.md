@@ -39,12 +39,16 @@ better this does.
 Needs [ripgrep](https://github.com/BurntSushi/ripgrep).
 
 ```
-curl -fsSL https://raw.githubusercontent.com/kyleboas/outline/main/install.sh | sh
+curl -o ~/bin/outline https://raw.githubusercontent.com/kyleboas/outline/main/outline
+chmod +x ~/bin/outline
 ```
 
-Puts `outline` on your PATH and adds the line to your shell profile. Add
-`-s -- --shim` to also install the guards that force agents to use it (see
-below). Safe to re-run.
+One file, two lines of shell. Nothing is executed during install and nothing
+else on your machine is touched — read it before you run it.
+
+If you also want the guards that make agents use it, there is an `install.sh`
+that fetches the extra files and adds a PATH line to your shell profile. It is
+short; read it first rather than piping it into a shell.
 
 ## Use
 
@@ -84,10 +88,13 @@ Every agent runs shell commands, so a guard on `cat` and `sed` catches all of
 them — Claude Code, pi, Cursor, anything, with nothing to configure.
 
 ```
-curl -fsSL https://raw.githubusercontent.com/kyleboas/outline/main/install.sh | sh -s -- --shim
+curl -o /tmp/outline-install.sh https://raw.githubusercontent.com/kyleboas/outline/main/install.sh
+less /tmp/outline-install.sh          # 40 lines, worth reading
+sh /tmp/outline-install.sh --shim
 ```
 
-That is the whole setup. Start a new shell and it is on.
+It installs the guards and adds a PATH line to your shell profile. Start a new
+shell and it is on.
 
 By default it **warns and gets out of the way**. `cat file.py` still prints the
 file; a line goes to stderr saying how long it was and what `outline` would have
