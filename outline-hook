@@ -1,55 +1,73 @@
-#!/bin/sh
-# PreToolUse hook for Read and Bash. Blocks whole-file reads of long source
-# files and tells the agent to run `outline` first. Install: see README.
+#!/usr/bin/env sh
+# Blocks whole-file reads of long source files; tells the agent to run `outline`
+# first. Works in any harness — three ways to call it:
+#
+#   outline-hook FILE            exit 1 + reason on stderr if FILE is too long
+#   outline-hook --cmd "CMD"     exit 1 + reason on stderr if CMD is an
+#                                unbounded read of a long source file
+#   outline-hook < hook.json     Claude Code PreToolUse: reads the tool call on
+#                                stdin, prints a deny decision as JSON
+#
+# Exit 0 = allow. Exit 1 = block. Set OUTLINE_HOOK_MAX to change the threshold.
 set -e
-in=$(cat)
 max=${OUTLINE_HOOK_MAX:-200}
 
-deny() {
-  jq -n --arg f "$1" --arg n "$2" '{hookSpecificOutput:{
-    hookEventName:"PreToolUse", permissionDecision:"deny",
-    permissionDecisionReason:("\($f) is \($n) lines. Run `outline \($f)` to get its definitions with line numbers, then read only the range you need (Read with offset/limit, or sed -n 'N,Mp'). Read it whole only if the outline is genuinely not enough.")}}'
-  exit 0
+reason() {
+  printf '%s is %s lines. Run `outline %s` to get its definitions with line numbers, then read only the range you need (offset/limit, or sed -n "N,Mp"). Read it whole only if the outline is genuinely not enough.\n' "$1" "$2" "$1"
 }
 
-is_source() {
-  case "$1" in
-    *.py|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.go|*.rs|*.rb|*.java|*.c|*.h|*.cpp|*.sh) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-check() {   # path -> deny if long source file
+# echoes the reason and returns 1 if the path is a long source file
+too_long() {
   [ -f "$1" ] || return 0
-  is_source "$1" || return 0
+  case "$1" in
+    *.py|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.go|*.rs|*.rb|*.java|*.c|*.h|*.cpp|*.sh) ;;
+    *) return 0 ;;
+  esac
   n=$(wc -l < "$1")
-  [ "$n" -gt "$max" ] && deny "$1" "$n"
-  return 0
+  [ "$n" -le "$max" ] && return 0
+  reason "$1" "$n"
+  return 1
 }
 
-case $(printf '%s' "$in" | jq -r '.tool_name // empty') in
+# returns 1 if CMD is a bare, unbounded read of a long source file
+cmd_reads_whole_file() {
+  case "$1" in
+    *'|'*|*'>'*|*'<'*|*';'*|*'&'*|*head*|*tail*|*'$('*|*'`'*) return 0 ;;
+  esac
+  # shellcheck disable=SC2086
+  set -- $1
+  case "$1" in
+    cat) shift ;;
+    sed) printf '%s' "$*" | grep -qE -- "-n +['\"]?[0-9]" && return 0
+         shift
+         while [ $# -gt 1 ]; do case "$1" in -*|*p*) shift ;; *) break ;; esac; done ;;
+    *)   return 0 ;;
+  esac
+  [ $# -eq 1 ] || return 0
+  too_long "$1"
+}
+
+case "${1:-}" in
+  --cmd) cmd_reads_whole_file "${2:-}" >&2 || exit 1; exit 0 ;;
+  "")    ;;                       # fall through to stdin/JSON mode
+  *)     too_long "$1" >&2 || exit 1; exit 0 ;;
+esac
+
+# ---- Claude Code PreToolUse (JSON on stdin) ----
+command -v jq >/dev/null || exit 0
+in=$(cat)
+[ -n "$in" ] || exit 0
+tool=$(printf '%s' "$in" | jq -r '.tool_name // empty')
+msg=''
+case "$tool" in
   Read)
     f=$(printf '%s' "$in" | jq -r '.tool_input.file_path // empty')
     rng=$(printf '%s' "$in" | jq -r '(.tool_input.offset // .tool_input.limit) // empty')
-    [ -n "$f" ] && [ -z "$rng" ] && check "$f"
-    ;;
+    [ -n "$f" ] && [ -z "$rng" ] && { msg=$(too_long "$f") || :; } ;;
   Bash)
-    cmd=$(printf '%s' "$in" | jq -r '.tool_input.command // empty')
-    # Only judge a bare, single, unbounded read. Anything piped, redirected,
-    # chained or already limited is left alone.
-    case "$cmd" in
-      *'|'*|*'>'*|*'<'*|*';'*|*'&'*|*'head'*|*'tail'*|*'$('*|*'`'*) exit 0 ;;
-    esac
-    set -- $cmd
-    case "$1" in
-      cat)   shift ;;
-      sed)   # allow a real range: any digit in the sed expression
-             printf '%s' "$cmd" | grep -qE "sed +-n +['\"]?[0-9]" && exit 0
-             shift
-             while [ $# -gt 1 ]; do case "$1" in -*|*p*) shift ;; *) break ;; esac; done ;;
-      *)     exit 0 ;;
-    esac
-    [ $# -eq 1 ] && check "$1"
-    ;;
+    c=$(printf '%s' "$in" | jq -r '.tool_input.command // empty')
+    [ -n "$c" ] && { msg=$(cmd_reads_whole_file "$c") || :; } ;;
 esac
-exit 0
+[ -n "$msg" ] || exit 0
+jq -n --arg r "$msg" '{hookSpecificOutput:{hookEventName:"PreToolUse",
+  permissionDecision:"deny", permissionDecisionReason:$r}}'

@@ -73,11 +73,23 @@ MIT
 
 ## Making an agent actually use it
 
-Telling an agent in `CLAUDE.md` works most of the time. To enforce it, install
-`outline-hook` as a `PreToolUse` hook on `Read`. It blocks whole-file reads of
-source files over 200 lines and tells the agent to outline first.
+Telling an agent in `CLAUDE.md` / `AGENTS.md` works most of the time. To enforce
+it, wire in `outline-hook`. It blocks whole-file reads of source files over 200
+lines and tells the agent to outline first.
 
-Add to `~/.claude/settings.json`:
+It takes three calling forms so it fits whatever a harness gives you:
+
+```
+outline-hook FILE            exit 1 + reason on stderr if FILE is too long
+outline-hook --cmd "CMD"     exit 1 + reason if CMD is an unbounded read
+outline-hook < hook.json     Claude Code PreToolUse JSON in, deny JSON out
+```
+
+Exit 0 means allow, exit 1 means block, and the reason goes to stderr. Any
+harness that can run a command and read an exit code can use it — the first two
+forms need nothing but a shell. `jq` is only required for the JSON form.
+
+### Claude Code
 
 ```json
 {
@@ -94,12 +106,18 @@ Add to `~/.claude/settings.json`:
 tool does, and agents told to prefer shell commands would otherwise route around
 the hook entirely.
 
-It lets a read through when:
+### Anything else
 
-- `Read` is given an `offset` or `limit`
-- `sed -n` is given a line range (`sed -n '41,60p' file.py`)
-- the command is piped, redirected, chained, or bounded by `head`/`tail`
-- the file is short, or isn't source code
+Call `outline-hook --cmd "$command"` before running a shell command, or
+`outline-hook "$path"` before reading a file, and refuse the operation when it
+exits 1, showing its stderr to the agent.
+
+### What gets through
+
+- `Read` given an `offset` or `limit`
+- `sed -n` given a line range (`sed -n '41,60p' file.py`)
+- anything piped, redirected, chained, or bounded by `head`/`tail`
+- short files, and anything that isn't source code
 
 Only a bare `cat file.py` or `sed -n p file.py` on a long source file is
-blocked. Set `OUTLINE_HOOK_MAX` to change the 200-line threshold. Needs `jq`.
+blocked. Set `OUTLINE_HOOK_MAX` to change the 200-line threshold.
