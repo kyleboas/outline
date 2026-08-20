@@ -87,19 +87,23 @@ them — Claude Code, pi, Cursor, anything, with nothing to configure.
 curl -fsSL https://raw.githubusercontent.com/kyleboas/outline/main/install.sh | sh -s -- --shim
 ```
 
-That is the whole setup — it installs the guards and puts them on your PATH.
-Start a new shell and it is on.
+That is the whole setup. Start a new shell and it is on.
 
-A bare `cat file.py` on a source file over 200 lines is then refused, with a
-message pointing at `outline`. Untouched: short files, non-source files, more
-than one argument, `cat < file`, pipes into `cat`, and every other use of `sed`.
-Escape any single call with `OUTLINE_HOOK=0`, `command cat`, or `/bin/cat`.
+By default it **warns and gets out of the way**. `cat file.py` still prints the
+file; a line goes to stderr saying how long it was and what `outline` would have
+cost instead. Nothing can break — scripts, pipelines and cron keep working
+exactly as before, and agents see the hint in their tool output and adapt.
 
-Two things to know before you install this. It changes `cat` for **everything**
-on your machine, scripts and cron included — the extension and length filters
-keep that narrow, but it is not zero. And `cat file.py | head -5` gets refused,
-because a shimmed `cat` cannot see that a pipeline bounds it; use
-`head -5 file.py` or `sed -n '1,5p' file.py` instead.
+```
+OUTLINE_HOOK=warn    default: print the hint, run the command anyway
+OUTLINE_HOOK=block   refuse a bare cat/sed -n p of a long source file
+OUTLINE_HOOK=off     say nothing
+```
+
+Set it per call (`OUTLINE_HOOK=off cat f.py`) or export it. Only reach for
+`block` once you have watched `warn` for a while and know what it catches —
+blocking cannot tell that `cat f.py | head -5` is already bounded, and refuses
+it. The tool hook below does not have that problem.
 
 ### 2. Tool hooks (precise, needs harness config)
 
