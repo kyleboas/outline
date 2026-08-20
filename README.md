@@ -39,9 +39,12 @@ better this does.
 Needs [ripgrep](https://github.com/BurntSushi/ripgrep).
 
 ```
-curl -o ~/bin/outline https://raw.githubusercontent.com/kyleboas/outline/main/outline
-chmod +x ~/bin/outline
+curl -fsSL https://raw.githubusercontent.com/kyleboas/outline/main/install.sh | sh
 ```
+
+Puts `outline` on your PATH and adds the line to your shell profile. Add
+`-s -- --shim` to also install the guards that force agents to use it (see
+below). Safe to re-run.
 
 ## Use
 
@@ -81,9 +84,11 @@ Every agent runs shell commands, so a guard on `cat` and `sed` catches all of
 them — Claude Code, pi, Cursor, anything, with nothing to configure.
 
 ```
-./install.sh --shim
-export PATH="$HOME/.local/share/outline/shim:$PATH"   # in your shell profile
+curl -fsSL https://raw.githubusercontent.com/kyleboas/outline/main/install.sh | sh -s -- --shim
 ```
+
+That is the whole setup — it installs the guards and puts them on your PATH.
+Start a new shell and it is on.
 
 A bare `cat file.py` on a source file over 200 lines is then refused, with a
 message pointing at `outline`. Untouched: short files, non-source files, more
